@@ -1,2 +1,1 @@
-# Reproduce_English-Pronunciation-Evaluation-without-Complex-Joint-Training
-Reproduce of English Pronunciation Evaluation without Complex Joint Training
+### Unofficial Reproduce of English-Pronunciation-Evaluation-without-Complex-Joint-Training: LoRA Fine-Tuned Speech Multimodal LLM
