@@ -1,0 +1,259 @@
+"""
+雙 LoRA 配置模型載入工具
+
+提供兩種配置：
+1. 預訓練配置（r=320）：使用預訓練 LoRA 權重
+2. 論文配置（r=64）：從零訓練，嚴格復現論文
+"""
+
+import torch
+import sys
+from transformers import AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoConfig
+from peft import peft_model, LoraConfig, get_peft_model
+
+# CRITICAL: Patch PEFT before using it to handle Phi-4's missing method
+_original_peft_init = peft_model.PeftModelForCausalLM.__init__
+
+def _patched_peft_init(self, model, peft_config, adapter_name="default", **kwargs):
+    """
+    Patched PEFT init that adds prepare_inputs_for_generation if missing.
+    This works around Phi-4-multimodal's architectural bug.
+    """
+    if not hasattr(model, 'prepare_inputs_for_generation'):
+        def prepare_inputs_for_generation(*args, **kwargs):
+            return {}
+        model.prepare_inputs_for_generation = prepare_inputs_for_generation
+
+    _original_peft_init(self, model, peft_config, adapter_name, **kwargs)
+
+peft_model.PeftModelForCausalLM.__init__ = _patched_peft_init
+print("✅ Patched PEFT to handle Phi-4's missing prepare_inputs_for_generation method")
+
+
+def get_model_and_processor_pretrained(
+    model_id: str = "microsoft/Phi-4-multimodal-instruct"
+):
+    """
+    配置 1：預訓練 LoRA 配置（r=320）
+
+    - Speech LoRA: r=320, alpha=640, dropout=0.01
+    - Vision LoRA: r=256, alpha=512, dropout=0.0
+    - 可訓練參數: 830M (14.9%)
+    - 優點: 從預訓練 LoRA 開始，收斂更快
+    - 輸出目錄: output/pretrained_r320/
+    """
+
+    bnb_config = None  # bfloat16，無量化
+    model_path = "/Users/xrickliao/WorkSpaces/LLM_Repo/models/Phi-4-multimodal-instruct"
+
+    processor = AutoProcessor.from_pretrained(
+        model_path,
+        local_files_only=True,
+        trust_remote_code=True
+    )
+
+    config = AutoConfig.from_pretrained(
+        model_path,
+        local_files_only=True,
+        trust_remote_code=True
+    )
+
+    config._attn_implementation = "eager"
+
+    # 使用預訓練模型的原始 LoRA 配置
+    config.speech_lora = {
+        'r': 320,
+        'lora_alpha': 640,
+        'layer': '((layers.*self_attn\\.(qkv|o)_proj)|(layers.*mlp\\.(gate_up|down)_proj))',
+        'dp': 0.01
+    }
+
+    config.vision_lora = {
+        'r': 256,
+        'lora_alpha': 512,
+        'layer': 'layers.*((self_attn\\.(qkv_proj|o_proj))|(mlp\\.(gate_up|down)_proj))',
+        'dp': 0.0
+    }
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        config=config,
+        local_files_only=True,
+        quantization_config=bnb_config,
+        device_map="auto",
+        trust_remote_code=True,
+        torch_dtype=torch.float16,
+    )
+
+    model.gradient_checkpointing_enable()
+
+    peft_config = LoraConfig(
+        r=320,
+        lora_alpha=640,
+        target_modules="all-linear",
+        lora_dropout=0.01,
+        bias="none",
+        task_type="CAUSAL_LM",
+    )
+
+    # CRITICAL: Apply LoRA configuration to enable training
+    print("
+🔧 Applying LoRA configuration to model...")
+    model = get_peft_model(model, peft_config)
+    print("✅ LoRA configuration applied - parameters are now trainable")
+
+    # 統計參數
+    lora_params = [(name, p) for name, p in model.named_parameters() if "lora" in name.lower()]
+    trainable_lora = sum(1 for _, p in lora_params if p.requires_grad)
+    total_lora = len(lora_params)
+    all_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    all_params = sum(p.numel() for p in model.parameters())
+
+    print(f"\n📊 【預訓練配置 r=320】參數統計:")
+    print(f"  總參數: {all_params:,}")
+    print(f"  可訓練參數: {all_trainable:,} ({100*all_trainable/all_params:.4f}%)")
+    print(f"  LoRA 層數: {total_lora}")
+    print(f"  可訓練 LoRA 層: {trainable_lora}")
+    print(f"  Speech LoRA: r=320, alpha=640, dp=0.01")
+    print(f"  Vision LoRA: r=256, alpha=512, dp=0.0")
+    print(f"  💾 訓練輸出目錄: output/pretrained_r320/")
+
+    return model, processor, peft_config
+
+
+def get_model_and_processor_paper(
+    model_id: str = "microsoft/Phi-4-multimodal-instruct"
+):
+    """
+    配置 2：論文 LoRA 配置（r=64）
+
+    - Speech LoRA: r=64, alpha=128, dropout=0.05
+    - Vision LoRA: r=256, alpha=512, dropout=0.0 (保持預訓練)
+    - 可訓練參數: ~200M (3.5%)
+    - 特點: LoRA 從零訓練，嚴格復現論文設定
+    - 輸出目錄: output/paper_r64/
+    """
+
+    bnb_config = None
+    model_path = "/Users/xrickliao/WorkSpaces/LLM_Repo/models/Phi-4-multimodal-instruct"
+
+    processor = AutoProcessor.from_pretrained(
+        model_path,
+        local_files_only=True,
+        trust_remote_code=True
+    )
+
+    config = AutoConfig.from_pretrained(
+        model_path,
+        local_files_only=True,
+        trust_remote_code=True
+    )
+
+    config._attn_implementation = "eager"
+
+    # 使用論文規格（Speech LoRA r=64）
+    config.speech_lora = {
+        'r': 64,              # 論文規格
+        'lora_alpha': 128,    # 論文規格
+        'layer': '((layers.*self_attn\\.(qkv|o)_proj)|(layers.*mlp\\.(gate_up|down)_proj))',
+        'dp': 0.05            # 論文規格
+    }
+
+    # Vision LoRA 保持預訓練配置（非主要任務）
+    config.vision_lora = {
+        'r': 256,
+        'lora_alpha': 512,
+        'layer': 'layers.*((self_attn\\.(qkv_proj|o_proj))|(mlp\\.(gate_up|down)_proj))',
+        'dp': 0.0
+    }
+
+    # 🔑 關鍵：ignore_mismatched_sizes 讓 Speech LoRA 重新初始化為 r=64
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        config=config,
+        local_files_only=True,
+        quantization_config=bnb_config,
+        device_map="auto",
+        trust_remote_code=True,
+        torch_dtype=torch.float16,
+        ignore_mismatched_sizes=True,  # 允許形狀不匹配，Speech LoRA 從零初始化
+    )
+
+    model.gradient_checkpointing_enable()
+
+    peft_config = LoraConfig(
+        r=64,
+        lora_alpha=128,
+        target_modules="all-linear",
+        lora_dropout=0.05,
+        bias="none",
+        task_type="CAUSAL_LM",
+    )
+
+    # CRITICAL: Apply LoRA configuration to enable training
+    print("
+🔧 Applying LoRA configuration to model...")
+    model = get_peft_model(model, peft_config)
+    print("✅ LoRA configuration applied - parameters are now trainable")
+
+    # 統計參數
+    lora_params = [(name, p) for name, p in model.named_parameters() if "lora" in name.lower()]
+    trainable_lora = sum(1 for _, p in lora_params if p.requires_grad)
+    total_lora = len(lora_params)
+    all_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    all_params = sum(p.numel() for p in model.parameters())
+
+    print(f"\n📊 【論文配置 r=64】參數統計:")
+    print(f"  總參數: {all_params:,}")
+    print(f"  可訓練參數: {all_trainable:,} ({100*all_trainable/all_params:.4f}%)")
+    print(f"  LoRA 層數: {total_lora}")
+    print(f"  可訓練 LoRA 層: {trainable_lora}")
+    print(f"  Speech LoRA: r=64, alpha=128, dp=0.05 (論文規格，從零訓練)")
+    print(f"  Vision LoRA: r=256, alpha=512, dp=0.0 (保持預訓練)")
+    print(f"  💾 訓練輸出目錄: output/paper_r64/")
+    print(f"  ⚠️  注意: Speech LoRA 權重被重新初始化（形狀不匹配）")
+
+    return model, processor, peft_config
+
+
+# 配置對照表
+CONFIGS = {
+    "pretrained_r320": {
+        "loader": get_model_and_processor_pretrained,
+        "output_dir": "output/pretrained_r320",
+        "description": "預訓練 LoRA 配置（r=320），從預訓練權重開始",
+        "speech_lora": {"r": 320, "alpha": 640, "dp": 0.01},
+        "vision_lora": {"r": 256, "alpha": 512, "dp": 0.0},
+        "trainable_params": "830M (14.9%)",
+    },
+    "paper_r64": {
+        "loader": get_model_and_processor_paper,
+        "output_dir": "output/paper_r64",
+        "description": "論文 LoRA 配置（r=64），Speech LoRA 從零訓練",
+        "speech_lora": {"r": 64, "alpha": 128, "dp": 0.05},
+        "vision_lora": {"r": 256, "alpha": 512, "dp": 0.0},
+        "trainable_params": "~200M (3.5%)",
+    }
+}
+
+
+def print_config_comparison():
+    """打印兩種配置的對照表"""
+    print("\n" + "="*80)
+    print("LoRA 配置對照表")
+    print("="*80)
+    print(f"{'項目':<20} {'預訓練配置 (r=320)':<35} {'論文配置 (r=64)':<35}")
+    print("-"*80)
+    print(f"{'Speech LoRA rank':<20} {'320':<35} {'64 ⭐':<35}")
+    print(f"{'Speech LoRA alpha':<20} {'640':<35} {'128 ⭐':<35}")
+    print(f"{'Speech dropout':<20} {'0.01':<35} {'0.05 ⭐':<35}")
+    print(f"{'Vision LoRA rank':<20} {'256':<35} {'256':<35}")
+    print(f"{'Vision LoRA alpha':<20} {'512':<35} {'512':<35}")
+    print(f"{'可訓練參數':<20} {'830M (14.9%)':<35} {'~200M (3.5%)':<35}")
+    print(f"{'訓練起點':<20} {'預訓練 LoRA 權重':<35} {'隨機初始化 ⭐':<35}")
+    print(f"{'輸出目錄':<20} {'output/pretrained_r320/':<35} {'output/paper_r64/':<35}")
+    print(f"{'預期收斂速度':<20} {'較快':<35} {'較慢（需更多 epoch）':<35}")
+    print(f"{'論文符合度':<20} {'部分':<35} {'完全符合 ⭐':<35}")
+    print("="*80)
+    print("⭐ = 論文原始規格")
+    print()

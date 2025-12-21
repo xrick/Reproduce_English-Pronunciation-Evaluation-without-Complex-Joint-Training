@@ -7,16 +7,23 @@ class AudioDataCollator:
 
     def __call__(self, features):
         # features 是來自資料集的字典列表
-        audio_arrays = [f["audio_array"] for f in features]
+        # Phi4MMProcessor expects audios as List[Tuple[numpy_array, sampling_rate]]
+        # Convert audio_array from list to numpy array if needed
+        audios = []
+        for f in features:
+            audio_array = f["audio_array"]
+            if isinstance(audio_array, list):
+                audio_array = np.array(audio_array, dtype=np.float32)
+            audios.append((audio_array, f["sampling_rate"]))
+
         text_inputs = [f["text_input"] for f in features]
-        
+
         # 處理器處理複雜的多模態填充和 token 化
         batch = self.processor(
             text=text_inputs,
-            audios=audio_arrays, 
+            audios=audios,
             return_tensors="pt",
-            padding=True,
-            sampling_rate=16000
+            padding=True
         )
         
         # 建立標籤 (Labels) 的邏輯

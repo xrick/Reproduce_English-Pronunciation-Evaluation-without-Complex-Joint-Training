@@ -1,0 +1,68 @@
+/Users/xrickliao/WorkSpaces/ResearchCodes/Reproduce_English_Pronunciation_Evaluation_without_Complex_Joint_Training/venv/lib/python3.11/site-packages/transformers/models/auto/image_processing_auto.py:647: FutureWarning: The image_processor_class argument is deprecated and will be removed in v4.42. Please use `slow_image_processor_class`, or `fast_image_processor_class` instead
+  warnings.warn(
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+`torch_dtype` is deprecated! Use `dtype` instead!
+/Users/xrickliao/.cache/huggingface/modules/transformers_modules/Phi_hyphen_4_hyphen_multimodal_hyphen_instruct/speech_conformer_encoder.py:2774: FutureWarning: Please specify CheckpointImpl.NO_REENTRANT as CheckpointImpl.REENTRANT will soon be removed as the default and eventually deprecated.
+  lambda i: encoder_checkpoint_wrapper(
+✅ Patched PEFT to handle Phi-4's missing prepare_inputs_for_generation method
+
+================================================================================
+訓練配置: pretrained_r320
+描述: 預訓練 LoRA 配置（r=320），從預訓練權重開始
+================================================================================
+
+載入模型...
+Loading checkpoint shards:   0%|          | 0/3 [00:00<?, ?it/s]Loading checkpoint shards:  33%|███▎      | 1/3 [00:01<00:03,  1.52s/it]Loading checkpoint shards:  67%|██████▋   | 2/3 [00:02<00:01,  1.18s/it]Loading checkpoint shards: 100%|██████████| 3/3 [00:02<00:00,  1.29it/s]Loading checkpoint shards: 100%|██████████| 3/3 [00:02<00:00,  1.09it/s]
+The model is already on multiple devices. Skipping the move to device specified in `args`.
+
+📊 【預訓練配置 r=320】參數統計:
+  總參數: 5,574,460,224
+  可訓練參數: 830,472,192 (14.8978%)
+  LoRA 層數: 512
+  可訓練 LoRA 層: 512
+  Speech LoRA: r=320, alpha=640, dp=0.01
+  Vision LoRA: r=256, alpha=512, dp=0.0
+  💾 訓練輸出目錄: output/pretrained_r320/
+
+載入訓練數據集: ../../DataSets/Reproduce_English_Pronunciation/speechocean762_formatted/train/
+訓練樣本數: 2500
+
+訓練配置已保存至: output/pretrained_r320/training_config.json
+輸出目錄: output/pretrained_r320
+訓練參數: 830M (14.9%)
+有效批次大小: 64
+
+開始訓練...
+  0%|          | 0/120 [00:00<?, ?it/s]/Users/xrickliao/WorkSpaces/ResearchCodes/Reproduce_English_Pronunciation_Evaluation_without_Complex_Joint_Training/venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py:692: UserWarning: 'pin_memory' argument is set as true but not supported on MPS now, device pinned memory won't be used.
+  warnings.warn(warn_msg)
+Traceback (most recent call last):
+  File "/Users/xrickliao/WorkSpaces/ResearchCodes/Reproduce_English_Pronunciation_Evaluation_without_Complex_Joint_Training/src/train_single_config.py", line 173, in <module>
+    main()
+  File "/Users/xrickliao/WorkSpaces/ResearchCodes/Reproduce_English_Pronunciation_Evaluation_without_Complex_Joint_Training/src/train_single_config.py", line 154, in main
+    trainer.train()
+  File "/Users/xrickliao/WorkSpaces/ResearchCodes/Reproduce_English_Pronunciation_Evaluation_without_Complex_Joint_Training/venv/lib/python3.11/site-packages/transformers/trainer.py", line 2325, in train
+    return inner_training_loop(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/xrickliao/WorkSpaces/ResearchCodes/Reproduce_English_Pronunciation_Evaluation_without_Complex_Joint_Training/venv/lib/python3.11/site-packages/transformers/trainer.py", line 2618, in _inner_training_loop
+    batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, args.device)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/xrickliao/WorkSpaces/ResearchCodes/Reproduce_English_Pronunciation_Evaluation_without_Complex_Joint_Training/venv/lib/python3.11/site-packages/transformers/trainer.py", line 5654, in get_batch_samples
+    batch_samples.append(next(epoch_iterator))
+                         ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/xrickliao/WorkSpaces/ResearchCodes/Reproduce_English_Pronunciation_Evaluation_without_Complex_Joint_Training/venv/lib/python3.11/site-packages/accelerate/data_loader.py", line 567, in __iter__
+    current_batch = next(dataloader_iter)
+                    ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/xrickliao/WorkSpaces/ResearchCodes/Reproduce_English_Pronunciation_Evaluation_without_Complex_Joint_Training/venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 732, in __next__
+    data = self._next_data()
+           ^^^^^^^^^^^^^^^^^
+  File "/Users/xrickliao/WorkSpaces/ResearchCodes/Reproduce_English_Pronunciation_Evaluation_without_Complex_Joint_Training/venv/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 788, in _next_data
+    data = self._dataset_fetcher.fetch(index)  # may raise StopIteration
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/xrickliao/WorkSpaces/ResearchCodes/Reproduce_English_Pronunciation_Evaluation_without_Complex_Joint_Training/venv/lib/python3.11/site-packages/torch/utils/data/_utils/fetch.py", line 55, in fetch
+    return self.collate_fn(data)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/xrickliao/WorkSpaces/ResearchCodes/Reproduce_English_Pronunciation_Evaluation_without_Complex_Joint_Training/src/AudioDataCollator.py", line 14, in __call__
+    batch = self.processor(
+            ^^^^^^^^^^^^^^^
+TypeError: Phi4MMProcessor.__call__() got an unexpected keyword argument 'sampling_rate'
+  0%|          | 0/120 [00:00<?, ?it/s]

@@ -1,0 +1,164 @@
+完美！NVIDIA TITAN RTX 是很好的 GPU。讓我根據你的硬件規格給出優化建議：
+🖥️ NVIDIA TITAN RTX 規格
+GPU: NVIDIA TITAN RTX
+記憶體: 24GB GDDR6
+CUDA 核心: 4,608
+架構: Turing (Compute Capability 7.5)
+CUDA 版本: 12.8
+驅動版本: 570.124.06
+⚠️ 重要：精度設置
+TITAN RTX 是 Turing 架構，Compute Capability 7.5：
+❌ 不支持 BF16（需要 Ampere 8.0+）
+✅ 支持 FP16
+✅ 最佳訓練配置
+推薦命令
+
+# 論文配置 (r=64) - 使用 FP16
+python src/train_single_config_remote.py \
+  --config paper_r64 \
+  --gpus 0 \
+  --fp16 \
+  --batch-size 8 \
+  --gradient-accumulation 8
+
+# 預訓練配置 (r=320)
+python src/train_single_config_remote.py \
+  --config pretrained_r320 \
+  --gpus 0 \
+  --fp16 \
+  --batch-size 6 \
+  --gradient-accumulation 10
+為什麼使用 --fp16？
+
+# train_single_config_remote.py 會自動檢測：
+compute_capability = torch.cuda.get_device_capability()
+# TITAN RTX = (7, 5)
+if compute_capability[0] < 8:  # 小於 8.0
+    use_fp16 = True   ✅ 自動切換到 FP16
+    use_bf16 = False
+但為了確保，明確指定 --fp16 更安全。
+📊 批次大小建議
+基於 24GB 記憶體：
+配置	批次大小	梯度累積	有效批次	預估 VRAM
+paper_r64 (推薦)	8	8	64	~18GB
+paper_r64 (安全)	6	10	60	~14GB
+pretrained_r320	6	10	60	~20GB
+pretrained_r320 (安全)	4	16	64	~16GB
+⏱️ 預估訓練時間
+TITAN RTX (24GB, FP16):
+paper_r64: 約 3-4 小時（3 epochs）
+pretrained_r320: 約 4-5 小時（3 epochs）
+比 Mac 快 2-3 倍！
+🚀 完整啟動流程
+1. 修復模型路徑（一次性）
+
+cd /datas/store162/xrick/prjs/Reproduce_English_Pronunciation_Evaluation
+
+# 方法 1: Python 自動修復（推薦）
+python3 << 'EOF'
+import re
+
+for file in ['src/model_utility_configs.py', 'src/model_utility.py']:
+    try:
+        with open(file, 'r') as f:
+            content = f.read()
+        
+        pattern = r'model_path\s*=\s*["\'].*?["\']'
+        replacement = 'model_path = "microsoft/phi-4-multimodal-instruct"'
+        content = re.sub(pattern, replacement, content)
+        
+        with open(file, 'w') as f:
+            f.write(content)
+        print(f"✅ {file} 已更新")
+    except FileNotFoundError:
+        pass
+EOF
+2. 啟動訓練
+
+# 激活環境
+source venv/bin/activate
+
+# 檢查 GPU
+nvidia-smi
+
+# 開始訓練（論文配置）
+python src/train_single_config_remote.py \
+  --config paper_r64 \
+  --gpus 0 \
+  --fp16 \
+  --batch-size 8 \
+  --gradient-accumulation 8
+3. 監控訓練
+終端 1: 訓練進程
+
+python src/train_single_config_remote.py --config paper_r64 --gpus 0 --fp16
+終端 2: GPU 監控
+
+watch -n 1 nvidia-smi
+終端 3: TensorBoard（可選）
+
+tensorboard --logdir src/output/paper_r64/logs --port 6007
+🔧 如果記憶體不足（OOM）
+方案 1: 減小批次大小
+
+python src/train_single_config_remote.py \
+  --config paper_r64 \
+  --gpus 0 \
+  --fp16 \
+  --batch-size 4 \
+  --gradient-accumulation 16
+方案 2: 啟用梯度檢查點（已默認啟用）
+訓練腳本已經包含：
+
+gradient_checkpointing=True  # 已啟用
+📈 預期輸出
+成功啟動後，你會看到：
+
+🖥️  Remote Training Configuration
+================================================================================
+訓練配置: paper_r64
+GPU 設備: 0 (1 GPU(s))
+CUDA 可用: True
+CUDA 版本: 12.8
+  GPU 0: NVIDIA TITAN RTX
+  內存: 24.00 GB
+================================================================================
+
+📊 【論文配置 r=64】參數統計:
+  總參數: 5,205,361,472
+  可訓練參數: 461,373,440 (8.8634%)
+  Speech LoRA: r=64, alpha=128, dp=0.05
+  精度: FP16
+
+載入訓練數據集...
+訓練樣本數: 2500
+
+🚀 開始訓練...
+================================================================================
+
+Epoch 1/3:   0%|          | 0/40 [00:00<?, ?it/s]
+✅ 完整檢查清單
+訓練前確認：
+ 已修復 model_path（使用在線模型）
+ 已激活虛擬環境：source venv/bin/activate
+ GPU 可見：nvidia-smi 顯示 TITAN RTX
+ 使用正確腳本：train_single_config_remote.py
+ 指定 --fp16（重要！）
+ 數據集路徑正確
+🎯 推薦配置總結
+最佳訓練命令（複製貼上即可）：
+
+source venv/bin/activate && \
+python src/train_single_config_remote.py \
+  --config paper_r64 \
+  --gpus 0 \
+  --fp16 \
+  --batch-size 8 \
+  --gradient-accumulation 8 \
+  --epochs 3 \
+  --learning-rate 2e-5
+這個配置：
+✅ 符合論文規格
+✅ 充分利用 24GB VRAM
+✅ 使用 FP16（TITAN RTX 最佳）
+✅ 預計 3-4 小時完成

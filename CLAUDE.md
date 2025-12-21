@@ -48,15 +48,24 @@ Optimization: QLoRA (4-bit NF4 quantization) + Flash Attention 2
 
 ```
 src/
-├── lora_config.py       # QLoRA config + model loading + LoRA setup
-├── data_transform.py    # SpeechOcean762 → training format conversion
-├── data_collator.py     # Batch collation with padding + label masking
-├── SFTTrainer.py        # Training configuration (SFTConfig + SFTTrainer)
-└── estimate.py          # Evaluation metrics (PCC, WER, PER, F1)
+├── model_utility.py              # Original model loader (r=320 pretrained config)
+├── model_utility_configs.py      # NEW: Dual-config loaders (r=320 & r=64)
+├── train_single_config.py        # NEW: CLI training script for one config
+├── train_dual_configs.py         # NEW: Interactive training for both configs
+├── data_utility.py               # SpeechOcean762 → training format conversion
+├── AudioDataCollator.py          # Batch collation with padding + label masking
+├── SFTTrainer.py                 # Original training script (deprecated)
+└── estimate.py                   # Evaluation metrics (PCC, WER, PER, F1)
 
-refdata/md_src/          # Reference documentation for each component
-paper/                   # Original research paper (English + Chinese)
-reproduceenv/            # Python 3.11.6 virtual environment
+claudedocs/
+├── peft_lora_incompatibility.md  # PEFT/LoRA compatibility issue documentation
+├── lora_from_scratch_config.md   # Paper specs (r=64) training guide
+└── dual_config_training_guide.md # NEW: Complete dual-config training guide
+
+refdata/md_src/                   # Reference documentation for each component
+paper/                            # Original research paper (English + Chinese)
+reproduceenv/                     # Python 3.11.6 virtual environment
+train_both_configs.sh             # NEW: Quick-start training script
 ```
 
 ## Development Setup
@@ -81,26 +90,77 @@ python --version
 - **scipy**: Pearson correlation coefficient (PCC)
 - **jiwer**: WER calculation
 
-## Training Configuration (Paper Section 4.2)
+## Training Configuration
 
-### CRITICAL: Paper-Accurate Hyperparameters
+### Quick Start (Recommended)
+
+**Train both configurations**:
+
+```bash
+./train_both_configs.sh
+```
+
+**Train single configuration**:
+
+```bash
+# Pretrained config (r=320)
+./train_both_configs.sh pretrained
+
+# Paper config (r=64)
+./train_both_configs.sh paper
+```
+
+**Or use Python directly**:
+
+```bash
+source run_env.sh
+cd src
+
+# Pretrained config
+python train_single_config.py --config pretrained_r320
+
+# Paper config
+python train_single_config.py --config paper_r64
+```
+
+### Dual Configuration System
+
+This project supports **two LoRA configurations** for training:
+
+#### 1. Pretrained Configuration (r=320)
+
+- **Speech LoRA**: r=320, alpha=640, dropout=0.01
+- **Vision LoRA**: r=256, alpha=512, dropout=0.0
+- **Trainable params**: 830M (14.9%)
+- **Training start**: Pretrained LoRA weights
+- **Output**: `output/pretrained_r320/`
+- **Advantage**: Faster convergence from pretrained weights
+
+#### 2. Paper Configuration (r=64)
+
+- **Speech LoRA**: r=64, alpha=128, dropout=0.05 (Paper specs ⭐)
+- **Vision LoRA**: r=256, alpha=512, dropout=0.0
+- **Trainable params**: ~200M (3.5%)
+- **Training start**: Randomly initialized LoRA
+- **Output**: `output/paper_r64/`
+- **Advantage**: Strict paper reproduction
+
+**See**: [claudedocs/dual_config_training_guide.md](claudedocs/dual_config_training_guide.md) for detailed guide
+
+### Paper-Accurate Hyperparameters (Paper Section 4.2)
 
 ```python
 # From paper Table 3 (best results at epoch 3)
-batch_size = 8                      # per_device_train_batch_size
-gradient_accumulation_steps = 8     # Effective batch = 64
-learning_rate = 2e-5                # NOTE: 2×10⁻⁵, NOT 2×10⁻⁴
-optimizer = "Adam"
 num_train_epochs = 3                # Paper's best results at epoch 3
-max_seq_length = 2048
-bf16 = True
+per_device_train_batch_size = 8     # Paper setting
+gradient_accumulation_steps = 8     # Effective batch = 64
+learning_rate = 2e-5                # Paper setting (2×10⁻⁵)
+optimizer = "adamw_torch"           # Adam optimizer
+bf16 = True                         # bfloat16 precision
+max_length = 2048                   # Audio token capacity (SFTConfig uses max_length)
 ```
 
-**WARNING**: The current implementation in `src/SFTTrainer.py` has INCORRECT hyperparameters:
-- Learning rate is 10x too high (2e-4 instead of 2e-5)
-- Batch size is 4 instead of 8
-- Gradient accumulation is 16 instead of 8
-- Trains for 4 epochs instead of optimal 3
+**NOTE**: New training scripts ([train_single_config.py](src/train_single_config.py), [train_dual_configs.py](src/train_dual_configs.py)) use correct hyperparameters. Old `SFTTrainer.py` is deprecated.
 
 ### Expected Performance (Paper Table 3, LoRA-only, Epoch 3)
 

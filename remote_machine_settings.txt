@@ -1,0 +1,35 @@
+/datas/store162/xrick/models/Phi-4-multimodal-instruct
+
+../../../DataSets/processed/train/
+
+/datas/store162/xrick/DataSets/processed/train
+/datas/store162/xrick/DataSets/processed/train
+
+python src/train_single_config_remote.py --config paper_r64 --gpus 0 --fp16
+
+python src/train_single_config_remote.py --config paper_r64 --gpus 0 --train-data /datas/store162/xrick/DataSets/processed/train
+
+
+python src/train_single_config_remote.py \
+  --config paper_r64 \
+  --gpus 0 \
+  --batch-size 4 \
+  --gradient-accumulation 16 \
+  --train-data /datas/store162/xrick/DataSets/processed/train
+
+
+  python src/train_single_config_remote.py \
+  --config paper_r64 \
+  --gpus 0 \
+  --batch-size 2 \
+  --gradient-accumulation 32 \
+  --train-data /datas/store162/xrick/DataSets/processed/train
+
+
+  python src/train_single_config_remote.py \
+  --config paper_r64 \
+  --gpus 0 \
+  --batch-size 2 \
+  --gradient-accumulation 32 \
+  --train-data /datas/store162/xrick/DataSets/processed/train
+

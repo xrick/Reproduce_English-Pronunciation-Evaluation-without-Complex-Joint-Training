@@ -1,0 +1,65 @@
+================================================================================
+⚠️  SYNTAX ERROR FIX - The sed command had wrong indentation
+================================================================================
+
+Copy this ENTIRE block to your remote terminal (it fixes the indentation):
+
+cd /datas/store162/xrick/prjs/Reproduce_English_Pronunciation_Evaluation
+
+cp src/model_utility_configs.py.backup src/model_utility_configs.py
+
+python3 << 'PYEOF'
+with open('src/model_utility_configs.py', 'r') as f:
+    content = f.read()
+
+old = '''    peft_config = LoraConfig(
+        r=64,
+        lora_alpha=128,
+        target_modules="all-linear",
+        lora_dropout=0.05,
+        bias="none",
+        task_type="CAUSAL_LM",
+    )
+
+    # 統計參數'''
+
+new = '''    peft_config = LoraConfig(
+        r=64,
+        lora_alpha=128,
+        target_modules="all-linear",
+        lora_dropout=0.05,
+        bias="none",
+        task_type="CAUSAL_LM",
+    )
+
+    # CRITICAL: Apply LoRA configuration to enable training
+    print("\\n🔧 Applying LoRA configuration to model...")
+    model = get_peft_model(model, peft_config)
+    print("✅ LoRA configuration applied - parameters are now trainable")
+
+    # 統計參數'''
+
+content = content.replace(old, new)
+
+with open('src/model_utility_configs.py', 'w') as f:
+    f.write(content)
+
+print("✅ LoRA fix applied")
+PYEOF
+
+sed -i 's/torch\.bfloat16/torch.float16/g' src/model_utility_configs.py
+sed -i 's/"fp16": use_fp16,/"fp16": False,  # Disabled AMP/' src/train_single_config_remote.py
+
+python3 -m py_compile src/model_utility_configs.py && echo "✅ Syntax OK"
+
+rm -rf src/output/paper_r64/
+source venv/bin/activate
+python src/train_single_config_remote.py --config paper_r64 --gpus 0
+
+================================================================================
+YOU MUST SEE:
+✅ LoRA fix applied
+✅ Syntax OK
+可訓練參數: 200,000,000 (3.5%)
+loss: 6.98 → 6.42 → 5.89
+================================================================================

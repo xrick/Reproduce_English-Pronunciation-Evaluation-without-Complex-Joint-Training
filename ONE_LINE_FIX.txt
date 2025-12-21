@@ -1,0 +1,40 @@
+========================================
+REMOTE TRAINING - ONE LINE FIX
+========================================
+
+Problem: Model directory not found
+Solution: Use online model (auto-downloads)
+
+────────────────────────────────────────
+Copy and paste this command on remote:
+────────────────────────────────────────
+
+sed -i 's|/datas/store162/xrick/LLM_Repo/models/Phi-4-multimodal-instruct|microsoft/phi-4-multimodal-instruct|g' src/model_utility_configs.py && echo "✅ Fixed! Model will download from HuggingFace on first run."
+
+────────────────────────────────────────
+
+What this does:
+✅ Changes model path to use HuggingFace online
+✅ Model auto-downloads to ~/.cache/huggingface/
+✅ Future runs use cached model
+✅ No manual file management needed
+
+After running this, start training:
+
+source venv/bin/activate
+python src/train_single_config_remote.py --config paper_r64 --gpus 0
+
+────────────────────────────────────────
+Alternative (if sed doesn't work):
+────────────────────────────────────────
+
+Manually edit src/model_utility_configs.py
+Find line ~14:
+  model_path = "/datas/store162/xrick/LLM_Repo/models/Phi-4-multimodal-instruct"
+
+Change to:
+  model_path = "microsoft/phi-4-multimodal-instruct"
+
+Save and train!
+
+========================================

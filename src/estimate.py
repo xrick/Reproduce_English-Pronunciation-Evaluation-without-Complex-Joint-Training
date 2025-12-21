@@ -1,5 +1,11 @@
 from scipy.stats import pearsonr
 import jiwer
+import torch
+import sys
+from transformers import AutoModelForCausalLM, AutoProcessor, BitsAndBytesConfig, AutoConfig
+
+# CRITICAL: Patch PEFT before using it to handle Phi-4's missing method
+from peft import peft_model, LoraConfig, get_peft_model
 
 def evaluate_model(model, test_dataset):
     model.eval()
@@ -37,3 +43,10 @@ def evaluate_model(model, test_dataset):
     pcc = pearsonr(pred_acc, ref_acc)
     
     print(f"Accuracy PCC: {pcc}")
+    
+if __name__ == "__main__":
+    # 假設 model 和 test_dataset 已經準備好
+    model, processor = get_model_and_processor()
+    test_dataset = get_processed_dataset("path_to_test_data")
+    
+    evaluate_model(model, test_dataset)
